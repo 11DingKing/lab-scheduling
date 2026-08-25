@@ -13,6 +13,7 @@ type Queue struct {
 	wg          sync.WaitGroup
 	maxAttempts int
 	baseDelay   time.Duration
+	cancel      context.CancelFunc
 }
 
 func New(size, attempts int) *Queue {
@@ -25,6 +26,11 @@ func New(size, attempts int) *Queue {
 	return &Queue{jobs: make(chan Job, size), maxAttempts: attempts, baseDelay: 25 * time.Millisecond}
 }
 func (q *Queue) Start(ctx context.Context) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	q.cancel = cancel
 	q.wg.Add(1)
 	go func() {
 		defer q.wg.Done()
@@ -69,4 +75,10 @@ func (q *Queue) run(ctx context.Context, job Job) {
 		}
 	}
 }
-func (q *Queue) Stop() { close(q.jobs); q.wg.Wait() }
+func (q *Queue) Stop() {
+	if q.cancel != nil {
+		q.cancel()
+	}
+	close(q.jobs)
+	q.wg.Wait()
+}

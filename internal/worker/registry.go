@@ -17,7 +17,10 @@ func (r *Registry) Start(parent context.Context, queue *Queue) {
 	if r.running {
 		return
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parent)
 	r.cancel = cancel
 	r.running = true
 	queue.Start(ctx)

@@ -65,6 +65,47 @@ func TestQueueCancellation(t *testing.T) {
 	}
 	q.Stop()
 }
+func TestStopPropagatesCancelToRunningJob(t *testing.T) {
+	q := worker.New(1, 3)
+	q.Start(context.Background())
+	started := make(chan struct{})
+	finished := make(chan struct{})
+	if err := q.Submit(func(ctx context.Context) error { close(started); <-ctx.Done(); close(finished); return ctx.Err() }); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	done := make(chan struct{})
+	go func() { q.Stop(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Stop blocked waiting for running job")
+	}
+	select {
+	case <-finished:
+	default:
+		t.Fatal("running job not cancelled by Stop")
+	}
+}
+func TestRegistryStartDerivesFromParent(t *testing.T) {
+	q := worker.New(1, 1)
+	var r worker.Registry
+	parent, cancelParent := context.WithCancel(context.Background())
+	r.Start(parent, q)
+	started := make(chan struct{})
+	finished := make(chan struct{})
+	if err := q.Submit(func(ctx context.Context) error { close(started); <-ctx.Done(); close(finished); return ctx.Err() }); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	cancelParent()
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("parent cancel not propagated to job")
+	}
+	r.Stop()
+}
 func TestRegistryLifecycle(t *testing.T) {
 	q := worker.New(2, 1)
 	var r worker.Registry
