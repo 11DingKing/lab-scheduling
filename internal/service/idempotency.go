@@ -21,19 +21,16 @@ func (i *Idempotency) Do(ctx context.Context, key string, payload []byte, fn fun
 	sum := sha256.Sum256(payload)
 	digest := hex.EncodeToString(sum[:])
 	i.mu.Lock()
+	defer i.mu.Unlock()
 	if old, ok := i.values[key]; ok {
-		i.mu.Unlock()
 		if old != digest {
 			return fmt.Errorf("idempotency key reused with different payload")
 		}
 		return nil
 	}
-	i.mu.Unlock()
 	if err := fn(); err != nil {
 		return err
 	}
-	i.mu.Lock()
-	defer i.mu.Unlock()
 	i.values[key] = digest
 	return nil
 }
